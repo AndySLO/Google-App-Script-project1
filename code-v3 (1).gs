@@ -1,57 +1,76 @@
-var source_folder_id = '';
-var archive_folder_id = '';
-var subject = '';
-var sender_email = '';
-function update() {
-  var threads = GmailApp.getInboxThreads(0, 100);
-  var msgs = GmailApp.getMessagesForThreads(threads);
-  for (var i = 0 ; i < msgs.length; i++) {
-    for (var j = 0; j < msgs[i].length; j++) {
-      if(msgs[i][j].getSubject() == subject && msgs[i][j].isUnread() &&
-       msgs[i][j].getFrom().includes(sender_email.toLowerCase())){
-        Logger.log('New email with subject found.');
-        Logger.log('Sender: '+msgs[i][j].getFrom());
-        msgs[i][j].markRead();
-        var email_body = msgs[i][j].getPlainBody().toString();
-        Logger.log("Body: "+email_body)
-        link = getFirstLink(email_body);
-        if(link != null){
-          Logger.log('Link found in the email.');
-          var fileBlob = getFile(link);
-          var archive_folder = DriveApp.getFolderById(archive_folder_id);
-          replaceFile(source_folder_id, fileBlob);
-          archive_folder.createFile(fileBlob);
-        }         
-      
-      }
-      
-    }
+const email = ""; // Input sender email like reports@company.com
+const subject = ""; //Input subject like Yahoo DSP Scheduled Report: Connect Ads/Yahoo DSP Report.
+const fileName = ""; // Input Filename that should be moved
+const downloadFolderId = ""; // Input Folder Id where new file should be added (In the begining old file should be also in this folder)
+const moveFolderId = ""; // Input Folder Id where old file should be moved
+const label = ""; // Not used currently  'reports'
+
+function myFunction() {
+  let file = getFileFromEmail(email, subject);
+  manageFiles(moveFolderId, downloadFolderId, file);
+}
+
+
+function getFileFromEmail(email,subject){
+
+  // Log the subject lines of the threads labeled with 'reports'
+  // var labelObject = GmailApp.getUserLabelByName("reports");
+  // var threads = labelObject.getThreads();
+
+  // for (var i = 0; i < threads.length; i++) {
+  //   Logger.log(threads[i].getFirstMessageSubject());
+  //   }
+
+  let threads = GmailApp.search(`from:"<${email}>", subject:"${subject}"`);
+
+  for (let thread of threads) {
+    let messageCount = thread.getMessageCount(); // Count the number of messages in that thread
+    let messages = thread.getMessages(); // All messages in thread
+    let lastMessage = messages[messageCount - 1]; // Get the last message in that thread. The first message is numbered 0.
+
+    let attach = lastMessage.getAttachments()[0]; // Get first attachment
+    let unzipblob = Utilities.unzip(attach)[0]; // Unzip file
+
+    return unzipblob
+
+    // for (let msg of messages){
+    //   var attach = msg.getAttachments()[0];
+    //   var unzipblob = Utilities.unzip(attach);
+    //   Logger.log(unzipblob[0].getContentType());
+    // }
   }
 }
 
-function getFile(fileURL) {
-  var response = UrlFetchApp.fetch(fileURL);
-  var fileBlob = response.getBlob();
-  return fileBlob;
-}
+function manageFiles(moveFolderId, downloadFolderId, blob){
 
-function getFirstLink(input){
-  var expression = /(https?:\/\/(?:www\.|(?!www))[^\s\.]+\.[^\s]{2,}|www\.[^\s]+\.[^\s]{2,})/gi;
-  var matches = input.match(expression);
-  return matches[0];
-}
+  let mainFolder = DriveApp.getFolderById(downloadFolderId)
+  let moveToFolder = DriveApp.getFolderById(moveFolderId)
+  let files = mainFolder.getFiles();
 
-function replaceFile(folderId,file_blob) {
-  const files = DriveApp.getFolderById(folderId).getFiles();
-  while (files.hasNext()) {
-    const file = files.next();
-    var file_name = file.getName();
-    Logger.log(file_name.toString());
-    if(file_name.toString().endsWith('.csv')){
-      Logger.log('updating file');
-      file.setContent(file_blob.getDataAsString());
+  let key = fileName;
+
+  while (files.hasNext()){
+    file = files.next();
+    if(file.getName().includes(key)){
+      moveToFolder.addFile(file);
+      mainFolder.removeFile(file)
     }
-    // Delete File
-    //Drive.Files.remove(file.getId())
   }
+  mainFolder.createFile(blob);  // Download new file to folder
 }
+
+// Шаги
+// 1. Проверить последнее пиьсмо с label 'reports' и темой "Yahoo DSP Scheduled Report: Connect Ads/Yahoo DSP Report."
+// 2. Извлечь вложение
+// 3. Разархивировтаь вложение
+// 4. Переместить существующий файл 'Connect Ads Yahoo DSP.csv' в 'Archive' в папке 'YAHOO DSP CON'
+// 5. Сохранить новый файл как Connect Ads Yahoo DSP.csv в папке YAHOO DSP CON
+// -----
+// Для Gmail
+// Письма приходят с label 'reports', Yahoo DSP Scheduled Report: Connect Ads/Yahoo DSP Report.
+// Письмо приходит каждый раз в 3:08 AM с почты 'reports@company.com'
+// Вложение: zip файл 'Connect Ads Yahoo DSP Report дд-мм-гггг.zip'.
+// -----
+// Для Drive
+// Вставить произвольный ID папки (будет заменен)
+// Потом будут подставлены ID папок из shared drive и настроены goggle permissions.
